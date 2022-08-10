@@ -29,7 +29,7 @@ def generateCNVMatrix(file_type, input_file, project, output_path, folder=False)
             '9+:het:0-100kb', '9+:het:100kb-1Mb', '9+:het:1Mb-10Mb', '9+:het:10Mb-40Mb', '9+:het:>40Mb']
 
         assert(len(features) == 48)
-        columns = list(df["sample"].unique())
+        columns = list(df[df.columns[0]].unique())
         arr = np.zeros((48, len(columns)), dtype='int')
         nmf_matrix = pd.DataFrame(arr, index=features, columns=columns)
 
@@ -310,7 +310,7 @@ def generateCNVMatrix(file_type, input_file, project, output_path, folder=False)
             size_bins.append(size_bin)
         df['size_classification'] = sizes
 
-        for sample, tcn, loh, size in zip(df["sample"], df['CN_class'], df['LOH'], df['size_classification']):
+        for sample, tcn, loh, size in zip(df[df.columns[0]], df['CN_class'], df['LOH'], df['size_classification']):
             if loh == "homdel":
                 channel = "0" + ":" + loh + ":" + size
             else:
@@ -330,7 +330,7 @@ def generateCNVMatrix(file_type, input_file, project, output_path, folder=False)
 
 
     df = pd.read_csv(input_file, sep='\t')
-    if file_type == "BATTENBERG":
+    if file_type == "BATTENBERG": #BATTENEBERG calls contain both clonal and subclonal events so they need to be dealth with separately
         clonal_df = df[["sample", "chr", "startpos", "endpos", "nMaj1_A", "nMin1_A"]]
         subclonal_df = df[["sample", "chr", "startpos", "endpos", "nMaj2_A", "nMin2_A"]]
         clonal_df = clonal_df.dropna()
@@ -340,11 +340,15 @@ def generateCNVMatrix(file_type, input_file, project, output_path, folder=False)
         subclonal_matrix = annotateSegFile(subclonal_df, file_type, project, output_path)[0]
         subclonal_matrix = subclonal_matrix.set_index(subclonal_matrix[subclonal_matrix.columns[0]])
         clonal_matrix = clonal_matrix.set_index(clonal_matrix[clonal_matrix.columns[0]])
+
         #add subclonal events to matrix containing clonal events to produce a final matrix that accounts for all events(Clonal + Subclonal)
         for k in range(0,len(subclonal_matrix)):
             for i,j in enumerate(subclonal_matrix.columns):
-                clonal_matrix.at[subclonal_matrix.index.to_list()[k], j] = subclonal_matrix.iat[k, i] + clonal_matrix.loc[subclonal_matrix.index.to_list()[k], j]
+                if i > 0:
+                    clonal_matrix.at[subclonal_matrix.index.to_list()[k], j] = subclonal_matrix.iat[k, i] + clonal_matrix.loc[subclonal_matrix.index.to_list()[k], j]
+
         clonal_matrix.to_csv(output_path + project + '.CNV48.matrix.tsv', sep='\t', index=None)
+        subclonal_matrix.to_csv(output_path + project + '.subclonal.matrix.tsv', sep='\t', index=None)
         print("Saved matrix to " + output_path + project + ".CNV48.matrix.tsv")
     elif file_type == "VCF":
         #convert vcf to dataframe with necessary info
